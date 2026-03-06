@@ -31,6 +31,8 @@ type TeamStats struct {
 	TotalCommits int                `json:"total_commits"`
 	TotalPRs     int                `json:"total_prs"`
 	OrgRepos     []RepoContribution `json:"org_repos"`
+	Days         []DayContribution  `json:"days,omitempty"`
+	PRDays       []DayContribution  `json:"pr_days,omitempty"`
 }
 
 func (c *Client) restGet(path string) ([]byte, error) {
@@ -114,6 +116,8 @@ func (c *Client) FetchTeamStats(org string, members []string, from, to time.Time
 	orgPrefix := strings.ToLower(org) + "/"
 	stats := &TeamStats{Org: org}
 	repoTotals := map[string]int{}
+	dayTotals := map[string]int{}
+	prDayTotals := map[string]int{}
 
 	for _, r := range results {
 		if r.err != nil {
@@ -140,6 +144,13 @@ func (c *Client) FetchTeamStats(org string, members []string, from, to time.Time
 		stats.TotalCommits += ms.Commits
 		stats.TotalPRs += ms.PRs
 		stats.Members = append(stats.Members, ms)
+
+		for _, d := range r.contribs.Days {
+			dayTotals[d.Date.Format("2006-01-02")] += d.Count
+		}
+		for _, d := range r.contribs.PRDays {
+			prDayTotals[d.Date.Format("2006-01-02")] += d.Count
+		}
 	}
 
 	sort.Slice(stats.Members, func(i, j int) bool {
@@ -151,6 +162,22 @@ func (c *Client) FetchTeamStats(org string, members []string, from, to time.Time
 	}
 	sort.Slice(stats.OrgRepos, func(i, j int) bool {
 		return stats.OrgRepos[i].Count > stats.OrgRepos[j].Count
+	})
+
+	for dateStr, count := range dayTotals {
+		t, _ := time.Parse("2006-01-02", dateStr)
+		stats.Days = append(stats.Days, DayContribution{Date: t, Count: count})
+	}
+	sort.Slice(stats.Days, func(i, j int) bool {
+		return stats.Days[i].Date.Before(stats.Days[j].Date)
+	})
+
+	for dateStr, count := range prDayTotals {
+		t, _ := time.Parse("2006-01-02", dateStr)
+		stats.PRDays = append(stats.PRDays, DayContribution{Date: t, Count: count})
+	}
+	sort.Slice(stats.PRDays, func(i, j int) bool {
+		return stats.PRDays[i].Date.Before(stats.PRDays[j].Date)
 	})
 
 	return stats, nil
