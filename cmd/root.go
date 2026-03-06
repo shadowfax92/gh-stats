@@ -120,6 +120,26 @@ func dashboard() error {
 		fmt.Println()
 	}
 
+	// Daily PR chart
+	allPRDays := combineDays(thisWeek.PRDays, lastWeek.PRDays)
+	if len(allPRDays) > 0 {
+		prValues := make([]int, len(allPRDays))
+		prLabels := make([]string, len(allPRDays))
+		now := time.Now()
+		today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+		for i, d := range allPRDays {
+			prValues[i] = d.Count
+			if d.Date.Equal(today) {
+				prLabels[i] = "Today"
+			} else {
+				prLabels[i] = d.Date.Format("Mon 02")
+			}
+		}
+		bold.Println("Daily PRs (last 2 weeks)")
+		render.VerticalBars(prValues, prLabels, color.New(color.FgGreen))
+		fmt.Println()
+	}
+
 	render.RepoBreakdown("Commits by Repo", thisWeek.CommitRepos, cyanBold, 8)
 	render.RepoBreakdown("PRs by Repo", thisWeek.PRRepos, greenBold, 8)
 

@@ -143,6 +143,57 @@ func RepoBreakdown(label string, repos []github.RepoContribution, c *color.Color
 	fmt.Println()
 }
 
+func MemberLeaderboard(label string, thisWeek, lastWeek []github.MemberStats, c *color.Color) {
+	if len(thisWeek) == 0 {
+		return
+	}
+
+	c.Println(label)
+	fmt.Println()
+
+	lastWeekMap := map[string]github.MemberStats{}
+	for _, m := range lastWeek {
+		lastWeekMap[m.Username] = m
+	}
+
+	maxTotal := 0
+	for _, m := range thisWeek {
+		if m.Total > maxTotal {
+			maxTotal = m.Total
+		}
+	}
+
+	barWidth := 20
+	for _, m := range thisWeek {
+		filled := 0
+		if maxTotal > 0 {
+			filled = m.Total * barWidth / maxTotal
+		}
+		if filled == 0 && m.Total > 0 {
+			filled = 1
+		}
+
+		bar := cyan.Sprint(strings.Repeat("█", filled)) + dim.Sprint(strings.Repeat("░", barWidth-filled))
+
+		counts := fmt.Sprintf("%d commits, %d PRs", m.Commits, m.PRs)
+
+		prev := lastWeekMap[m.Username]
+		delta := m.Total - prev.Total
+		var deltaStr string
+		switch {
+		case delta > 0:
+			deltaStr = greenBold.Sprintf(" (+%d)", delta)
+		case delta < 0:
+			deltaStr = red.Sprintf(" (%d)", delta)
+		default:
+			deltaStr = dim.Sprint(" (=)")
+		}
+
+		fmt.Printf("  %-18s %s %s%s\n", bold.Sprint(m.Username), bar, counts, deltaStr)
+	}
+	fmt.Println()
+}
+
 func ContributionsJSON(thisWeek, lastWeek *github.Contributions) error {
 	type jsonOutput struct {
 		ThisWeek struct {

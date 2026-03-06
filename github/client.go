@@ -29,6 +29,7 @@ type Contributions struct {
 	TotalCommits int
 	TotalPRs     int
 	Days         []DayContribution
+	PRDays       []DayContribution
 	CommitRepos  []RepoContribution
 	PRRepos      []RepoContribution
 }
@@ -55,6 +56,11 @@ const contributionsQuery = `query($login: String!, $from: DateTime!, $to: DateTi
       pullRequestContributionsByRepository(maxRepositories: 25) {
         repository { nameWithOwner }
         contributions { totalCount }
+      }
+      pullRequestContributions(first: 100) {
+        nodes {
+          occurredAt
+        }
       }
     }
   }
@@ -95,6 +101,11 @@ type graphqlResponse struct {
 						TotalCount int `json:"totalCount"`
 					} `json:"contributions"`
 				} `json:"pullRequestContributionsByRepository"`
+				PullRequestContributions struct {
+					Nodes []struct {
+						OccurredAt string `json:"occurredAt"`
+					} `json:"nodes"`
+				} `json:"pullRequestContributions"`
 			} `json:"contributionsCollection"`
 		} `json:"user"`
 	} `json:"data"`
@@ -170,6 +181,25 @@ func (c *Client) FetchContributions(from, to time.Time) (*Contributions, error) 
 			}
 		}
 	}
+
+	prDayCounts := map[string]int{}
+	for _, node := range col.PullRequestContributions.Nodes {
+		t, err := time.Parse(time.RFC3339, node.OccurredAt)
+		if err != nil {
+			continue
+		}
+		dateKey := t.Format("2006-01-02")
+		prDayCounts[dateKey]++
+	}
+	for dateKey, count := range prDayCounts {
+		t, _ := time.Parse("2006-01-02", dateKey)
+		if (t.Equal(from) || t.After(from)) && (t.Before(to) || t.Equal(to)) {
+			result.PRDays = append(result.PRDays, DayContribution{Date: t, Count: count})
+		}
+	}
+	sort.Slice(result.PRDays, func(i, j int) bool {
+		return result.PRDays[i].Date.Before(result.PRDays[j].Date)
+	})
 
 	for _, r := range col.CommitContributionsByRepository {
 		result.CommitRepos = append(result.CommitRepos, RepoContribution{
