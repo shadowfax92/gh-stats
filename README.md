@@ -6,7 +6,6 @@
 
 *PRs, commits, repos, trends, and team analytics — one command.*
 
-![gh-stats demo](assets/demo.png)
 
 </div>
 
@@ -70,5 +69,11 @@ make completions    # installs fish completions
 ```
 
 ---
+
+<div align="center">
+
+![gh-stats demo](assets/demo.png)
+
+</div>
 
 > This is a personal tool I built for my own workflow. Feel free to fork and adapt it to your needs.
