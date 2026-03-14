@@ -1,56 +1,46 @@
-# gh-stats
+<div align="center">
 
-A terminal dashboard for your GitHub contribution stats. View PRs, commits, repo breakdowns, daily activity charts, and team-level analytics — all from the command line.
+# 📊 gh-stats
 
-## Features
+**GitHub contribution stats in your terminal.**
 
-- **Personal dashboard** — week-over-week PRs and commits with trend indicators
-- **Daily activity charts** — terminal bar charts for commits and PRs over the last 2 weeks
-- **Repo breakdown** — see which repositories you're most active in
-- **Team stats** — org-wide leaderboard, member activity, and repo breakdown with concurrent fetching
-- **Weekly trends** — multi-week bar charts for commits and PRs
-- **JSON output** — pipe data to `jq` or other tools with `--json`
+*PRs, commits, repos, trends, and team analytics — one command.*
 
-## Prerequisites
+</div>
 
-- [Go 1.25+](https://go.dev/dl/)
-- [GitHub CLI (`gh`)](https://cli.github.com/) — authenticated via `gh auth login`
+You want to know how your week is going without leaving the terminal. gh-stats pulls your contribution data from the GitHub GraphQL API and renders dashboards with bar charts, repo breakdowns, and week-over-week comparisons — for yourself or your entire org.
 
-`gh-stats` uses your `gh` auth token automatically. No separate token configuration needed.
+- 📈 **Personal dashboard** — week-over-week PRs and commits with trend indicators
+- 📅 **Daily activity charts** — terminal bar charts for commits and PRs over the last 2 weeks
+- 📦 **Repo breakdown** — see which repositories you're most active in
+- 👥 **Team stats** — org-wide leaderboard, member activity, and concurrent multi-member fetching
+- 📉 **Weekly trends** — multi-week bar charts for commits and PRs
+- 🔧 **JSON output** — pipe data to `jq` or other tools with `--json`
+
+---
 
 ## Install
 
-```bash
+Requires [Go 1.25+](https://go.dev/dl/) and [GitHub CLI (`gh`)](https://cli.github.com/) authenticated via `gh auth login`.
+
+```sh
 git clone https://github.com/shadowfax92/gh-stats.git
 cd gh-stats
-make install
+make install    # builds and copies to $GOPATH/bin/
 ```
 
-This builds the binary and copies it to `$GOPATH/bin`.
+No separate token configuration needed — gh-stats uses your `gh` auth token automatically.
 
-## Usage
+## CLI
 
-```bash
-# Personal dashboard (default)
-gh-stats
-
-# Detailed commit stats with weekly trends
-gh-stats commits
-
-# Detailed PR stats with weekly trends
-gh-stats prs
-
-# Contribution breakdown by repository
-gh-stats repos
-
-# List your organizations
-gh-stats orgs
-
-# Team stats for an organization
-gh-stats team <org>
-
-# Filter to a specific team member
-gh-stats team <org> --member <username>
+```sh
+gh-stats                          # personal dashboard (default)
+gh-stats commits                  # detailed commit stats with weekly trends
+gh-stats prs                      # detailed PR stats with weekly trends
+gh-stats repos                    # contribution breakdown by repository
+gh-stats orgs                     # list your organizations
+gh-stats team <org>               # team stats for an organization
+gh-stats team <org> --member bob  # filter to a specific team member
 ```
 
 ### Global Flags
@@ -61,13 +51,22 @@ gh-stats team <org> --member <username>
 | `--weeks` | `4` | Number of weeks for trend charts |
 | `--user` | auto-detected | GitHub username |
 
-## Configuration
+## Config
 
-Config is stored at `~/.config/gh-stats/config.yaml` (or `$XDG_CONFIG_HOME/gh-stats/config.yaml`). Your GitHub username is auto-detected from `gh` on first run and cached there.
+Location: `~/.config/gh-stats/config.yaml` (or `$XDG_CONFIG_HOME/gh-stats/config.yaml`)
+
+Your GitHub username is auto-detected from `gh` on first run and cached here. You can also set it manually:
+
+```yaml
+username: shadowfax92
+```
 
 ## Shell Completions
 
-```bash
-# Fish
-make completions
+```sh
+make completions    # installs fish completions
 ```
+
+---
+
+> This is a personal tool I built for my own workflow. Feel free to fork and adapt it to your needs.
