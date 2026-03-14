@@ -6,6 +6,8 @@
 
 *PRs, commits, repos, trends, and team analytics — one command.*
 
+![gh-stats demo](assets/demo.png)
+
 </div>
 
 You want to know how your week is going without leaving the terminal. gh-stats pulls your contribution data from the GitHub GraphQL API and renders dashboards with bar charts, repo breakdowns, and week-over-week comparisons — for yourself or your entire org.
