@@ -61,10 +61,7 @@ func VerticalBars(values []int, labels []string, c *color.Color) {
 		return
 	}
 
-	chartHeight := 8
-	if maxVal < chartHeight {
-		chartHeight = maxVal
-	}
+	chartHeight := min(8, maxVal)
 
 	colWidth := 7
 	for _, l := range labels {
@@ -190,6 +187,109 @@ func MemberLeaderboard(label string, thisWeek, lastWeek []github.MemberStats, c 
 		}
 
 		fmt.Printf("  %-18s %s %s%s\n", bold.Sprint(m.Username), bar, counts, deltaStr)
+	}
+	fmt.Println()
+}
+
+func FormatTokens(n int64) string {
+	switch {
+	case n >= 1_000_000_000:
+		return fmt.Sprintf("%.1fB", float64(n)/1_000_000_000)
+	case n >= 1_000_000:
+		return fmt.Sprintf("%.1fM", float64(n)/1_000_000)
+	case n >= 1_000:
+		return fmt.Sprintf("%.1fK", float64(n)/1_000)
+	default:
+		return fmt.Sprintf("%d", n)
+	}
+}
+
+func FormatCost(f float64) string {
+	if f >= 100 {
+		return fmt.Sprintf("$%.0f", f)
+	}
+	return fmt.Sprintf("$%.2f", f)
+}
+
+func GrowthLine(label string, current, previous float64, unit string, c *color.Color) {
+	delta := current - previous
+	var pct float64
+	if previous > 0 {
+		pct = (delta / previous) * 100
+	}
+
+	c.Print(label)
+	fmt.Printf("  ")
+	bold.Printf("%s", unit)
+
+	if previous == 0 {
+		dim.Printf("  (no previous data)")
+	} else {
+		var deltaColor *color.Color
+		var sign string
+		switch {
+		case delta > 0:
+			deltaColor = greenBold
+			sign = "+"
+		case delta < 0:
+			deltaColor = red
+			sign = ""
+		default:
+			deltaColor = dim
+			sign = ""
+		}
+		deltaColor.Printf("  (%s%.1f%%)", sign, pct)
+	}
+	fmt.Println()
+}
+
+func FloatBars(values []float64, labels []string, formatter func(float64) string, c *color.Color) {
+	maxVal := 0.0
+	for _, v := range values {
+		if v > maxVal {
+			maxVal = v
+		}
+	}
+
+	if maxVal == 0 {
+		fmt.Println("  (none)")
+		return
+	}
+
+	chartHeight := 8
+
+	colWidth := 7
+	for _, l := range labels {
+		if len(l)+1 > colWidth {
+			colWidth = len(l) + 1
+		}
+	}
+
+	for row := chartHeight; row >= 1; row-- {
+		threshold := float64(row) / float64(chartHeight) * maxVal
+		fmt.Print("  ")
+		for _, v := range values {
+			if v >= threshold && v > 0 {
+				bar := c.Sprint("██")
+				pad := colWidth - 2
+				fmt.Printf("%s%s", bar, strings.Repeat(" ", pad))
+			} else {
+				fmt.Print(strings.Repeat(" ", colWidth))
+			}
+		}
+		fmt.Println()
+	}
+
+	fmt.Print("  ")
+	for _, l := range labels {
+		fmt.Printf("%-*s", colWidth, l)
+	}
+	fmt.Println()
+
+	fmt.Print("  ")
+	for _, v := range values {
+		s := formatter(v)
+		dim.Printf("%-*s", colWidth, s)
 	}
 	fmt.Println()
 }
