@@ -113,14 +113,10 @@ var teamCmd = &cobra.Command{
 		renderTodayByMember(this.stats.Members, memberCommitDays, memberPRDays, today)
 		renderTrendByMember(this.stats.Members, memberCommitDays, memberPRDays, today)
 
-		if detailed {
-			renderDailyBars(fmt.Sprintf("Team Daily Commits · last %d days", days),
-				render.FillDays(teamCommitDays, today, days), today, color.New(color.FgCyan))
-			renderDailyBars(fmt.Sprintf("Team Daily PRs · last %d days", days),
-				render.FillDays(teamPRDays, today, days), today, color.New(color.FgGreen))
-		} else {
-			renderSparklineBlock(teamCommitDays, teamPRDays, today, days)
-		}
+		renderDailyBars(fmt.Sprintf("Team Commits · last %d days", days),
+			render.FillDays(teamCommitDays, today, days), today, color.New(color.FgCyan))
+		renderDailyBars(fmt.Sprintf("Team PRs · last %d days", days),
+			render.FillDays(teamPRDays, today, days), today, color.New(color.FgGreen))
 
 		renderMemberSparklines("Last "+fmt.Sprintf("%d", days)+" days · commits per member",
 			this.stats.Members, memberCommitDays, today, days, render.Cyan)

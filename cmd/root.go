@@ -17,7 +17,6 @@ var (
 	days       int
 	username   string
 	noCache    bool
-	detailed   bool
 	cacheTTL   = 5 * time.Minute
 	client     *gh.Client
 )
@@ -192,14 +191,10 @@ func dashboard() error {
 	renderTodaySection(commitDays, prDays, today, "")
 	renderTrendsSection(commitDays, prDays, today)
 
-	if detailed {
-		renderDailyBars("Daily Commits · last "+fmt.Sprintf("%d", days)+" days",
-			render.FillDays(commitDays, today, days), today, color.New(color.FgCyan))
-		renderDailyBars("Daily PRs · last "+fmt.Sprintf("%d", days)+" days",
-			render.FillDays(prDays, today, days), today, color.New(color.FgGreen))
-	} else {
-		renderSparklineBlock(commitDays, prDays, today, days)
-	}
+	renderDailyBars(fmt.Sprintf("Commits · last %d days", days),
+		render.FillDays(commitDays, today, days), today, color.New(color.FgCyan))
+	renderDailyBars(fmt.Sprintf("PRs · last %d days", days),
+		render.FillDays(prDays, today, days), today, color.New(color.FgGreen))
 
 	thisStart, _ := weekBounds(0)
 	commitRepos := aggregateRepos(weekly, func(c *gh.Contributions) []gh.RepoContribution {
@@ -269,32 +264,6 @@ func printTrendDualRow(label string, prsCur, prsPrev, comCur, comPrev int) {
 	render.PctColorInt(prsCur, prsPrev).Printf("%-7s", render.FormatPctInt(prsCur, prsPrev))
 	render.Dim.Print("   commits ")
 	render.PctColorInt(comCur, comPrev).Printf("%s", render.FormatPctInt(comCur, comPrev))
-	fmt.Println()
-}
-
-func renderSparklineBlock(commitDays, prDays []gh.DayContribution, today time.Time, n int) {
-	commits := render.FillDays(commitDays, today, n)
-	prs := render.FillDays(prDays, today, n)
-
-	commitVals := make([]int, len(commits))
-	prVals := make([]int, len(prs))
-	for i := range commits {
-		commitVals[i] = commits[i].Count
-	}
-	for i := range prs {
-		prVals[i] = prs[i].Count
-	}
-
-	first := commits[0].Date.Format("Jan 02")
-	last := "Today"
-
-	render.Bold.Printf("Last %d days\n", n)
-	render.Cyan.Printf("  %s", render.Sparkline(commitVals))
-	render.Dim.Println("   commits")
-	render.Green.Printf("  %s", render.Sparkline(prVals))
-	render.Dim.Println("   PRs")
-	pad := strings.Repeat(" ", maxInt(1, n-len(first)-len(last)))
-	render.Dim.Printf("  %s%s%s\n", first, pad, last)
 	fmt.Println()
 }
 
@@ -415,7 +384,6 @@ func init() {
 	rootCmd.PersistentFlags().IntVar(&days, "days", 14, "Window in days for trends and charts")
 	rootCmd.PersistentFlags().StringVar(&username, "user", "", "GitHub username (auto-detected from gh)")
 	rootCmd.PersistentFlags().BoolVar(&noCache, "no-cache", false, "Bypass cache, force re-fetch")
-	rootCmd.PersistentFlags().BoolVarP(&detailed, "detailed", "d", false, "Show full daily bar charts instead of sparklines")
 	rootCmd.SetUsageTemplate(usageTemplate)
 }
 

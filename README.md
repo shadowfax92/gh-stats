@@ -12,10 +12,9 @@ You want to know "how many PRs did I land today?" and "what's my team doing this
 
 - 📅 **Today first** — top-of-screen answer to "what did I/we ship today?"
 - 📈 **Growth %** — explicit day-over-day and week-over-week deltas, color-coded
-- ✨ **14-day sparklines** — commits and PRs per member at a glance
-- 👥 **Team breakdown** — per-member trends so you can spot velocity changes
+- 📊 **Daily bar charts** — 14 days of commits and PRs with per-day labels and values
+- 👥 **Team breakdown** — per-member sparklines and DoD/WoW trends
 - ⚡ **Cached by default** — repeat runs are ~50ms instead of 5s
-- 🔍 **Detailed mode** — `-d` swaps sparklines for full daily bar charts
 - 🔧 **JSON output** — pipe data to `jq` or other tools with `--json`
 
 > Looking for AI token usage stats? See [`tokens`](https://github.com/shadowfax92/tokens) — Claude Code + Codex daily spend in the same dashboard format.
@@ -44,9 +43,8 @@ No separate token configuration needed — `gh-stats` uses your `gh` auth token 
 
 ```sh
 gh-stats                       # how am I doing today + last 14 days
-gh-stats team <org>            # how is my team doing today + per-member sparklines
+gh-stats team <org>            # how is my team doing today + per-member breakdown
 gh-stats commits               # daily commit chart with DoD / WoW
-gh-stats -d                    # detailed: full daily bars instead of sparklines
 gh-stats --days 30             # extend the trend window to 30 days
 ```
 
@@ -69,7 +67,6 @@ gh-stats --days 30             # extend the trend window to 30 days
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--days N` | `14` | Window in days for trends and charts |
-| `-d, --detailed` | `false` | Show full daily bar charts instead of sparklines |
 | `--no-cache` | `false` | Bypass cache, force re-fetch |
 | `--json` | `false` | JSON output |
 | `--user <login>` | auto-detected | GitHub username |
@@ -81,16 +78,6 @@ gh-stats --days 30             # extend the trend window to 30 days
 <div align="center">
 
 ![gh-stats team](assets/team.svg)
-
-</div>
-
-## Detailed mode
-
-`-d` switches sparklines for full vertical bar charts (works on dashboard, `commits`, `prs`, `team`):
-
-<div align="center">
-
-![gh-stats detailed](assets/dashboard-detailed.svg)
 
 </div>
 
