@@ -7,18 +7,21 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/fatih/color"
 	gh "github.com/nickhudkins/gh-stats/github"
+	"github.com/nickhudkins/gh-stats/render"
 	"github.com/spf13/cobra"
 )
 
 var reposCmd = &cobra.Command{
-	Use:   "repos",
-	Short: "Contribution breakdown by repository",
+	Use:         "repos",
+	Short:       "Contribution breakdown by repository (this week)",
+	Annotations: map[string]string{"group": groupViews},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		thisStart, thisEnd := weekBounds(0)
 
-		contribs, err := client.FetchContributions(thisStart, thisEnd)
+		stop := startSpinner("Fetching contributions from GitHub...")
+		contribs, _, err := client.FetchContributionsCached(thisStart, thisEnd, fetchOpts())
+		stop()
 		if err != nil {
 			return err
 		}
@@ -31,16 +34,12 @@ var reposCmd = &cobra.Command{
 			return enc.Encode(merged)
 		}
 
-		bold := color.New(color.Bold)
-		dim := color.New(color.Faint)
-		cyan := color.New(color.FgCyan)
-		green := color.New(color.FgGreen)
-
-		bold.Printf("Repos  %s — %s\n", thisStart.Format("Jan 2"), thisEnd.Format("Jan 2"))
+		render.Bold.Print("Repos")
+		render.Dim.Printf("  ·  %s → %s\n", thisStart.Format("Jan 2"), thisEnd.Format("Jan 2"))
 		fmt.Println()
 
 		if len(merged) == 0 {
-			dim.Println("  No contributions this week.")
+			render.Dim.Println("  No contributions this week.")
 			return nil
 		}
 
@@ -61,7 +60,7 @@ var reposCmd = &cobra.Command{
 				filled = 1
 			}
 
-			bar := cyan.Sprint(strings.Repeat("█", filled)) + dim.Sprint(strings.Repeat("░", barWidth-filled))
+			bar := render.Cyan.Sprint(strings.Repeat("█", filled)) + render.Dim.Sprint(strings.Repeat("░", barWidth-filled))
 
 			repo := r.Repo
 			if len(repo) > 35 {
@@ -70,7 +69,7 @@ var reposCmd = &cobra.Command{
 
 			counts := fmt.Sprintf("%d commits", r.Commits)
 			if r.PRs > 0 {
-				counts += green.Sprintf(", %d PRs", r.PRs)
+				counts += render.Green.Sprintf(", %d PRs", r.PRs)
 			}
 			fmt.Printf("  %-37s %s %s\n", repo, bar, counts)
 		}

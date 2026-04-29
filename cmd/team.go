@@ -16,14 +16,17 @@ import (
 var memberFilter string
 
 var teamCmd = &cobra.Command{
-	Use:   "team <org>",
-	Short: "Team contribution stats for an organization",
-	Long:  "View team-level GitHub stats for an organization you belong to.\nShows member leaderboard, team totals, and org repo activity.",
-	Args:  cobra.ExactArgs(1),
+	Use:         "team <org>",
+	Short:       "Team contribution stats for an organization",
+	Long:        "View team-level GitHub stats for an organization you belong to.\nShows member leaderboard, team totals, and org repo activity.",
+	Annotations: map[string]string{"group": groupTeam},
+	Args:        cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		org := args[0]
 
-		members, err := client.ListOrgMembers(org)
+		stop := startSpinner(fmt.Sprintf("Listing %s members...", org))
+		members, _, err := client.ListOrgMembersCached(org, fetchOpts())
+		stop()
 		if err != nil {
 			return fmt.Errorf("could not list members for %s: %w", org, err)
 		}
@@ -45,14 +48,8 @@ var teamCmd = &cobra.Command{
 			}
 		}
 
-		bold := color.New(color.Bold)
-		dim := color.New(color.Faint)
-		if !jsonOutput {
-			bold.Printf("Fetching stats for %s", color.New(color.FgCyan, color.Bold).Sprint(org))
-			dim.Printf(" (%d members, %d weeks)...\n", len(members), weeks)
-		}
+		stop = startSpinner(fmt.Sprintf("Fetching %d weeks for %d members from GitHub...", weeks, len(members)))
 
-		// Fetch all weeks
 		type weekData struct {
 			stats *gh.TeamStats
 			start time.Time
@@ -61,12 +58,14 @@ var teamCmd = &cobra.Command{
 		allWeeks := make([]weekData, weeks)
 		for i := 0; i < weeks; i++ {
 			start, end := weekBounds(weeks - 1 - i)
-			stats, err := client.FetchTeamStats(org, members, start, end)
+			stats, _, err := client.FetchTeamStatsCached(org, members, start, end, fetchOpts())
 			if err != nil {
+				stop()
 				return err
 			}
 			allWeeks[i] = weekData{stats: stats, start: start, end: end}
 		}
+		stop()
 
 		thisWeek := allWeeks[weeks-1]
 		var lastWeek weekData
@@ -80,11 +79,11 @@ var teamCmd = &cobra.Command{
 				PRs     int `json:"prs"`
 			}
 			out := struct {
-				Org      string                    `json:"org"`
-				ThisWeek weekJ                     `json:"this_week"`
-				LastWeek weekJ                     `json:"last_week"`
-				Members  []gh.MemberStats          `json:"members"`
-				Repos    []gh.RepoContribution     `json:"repos"`
+				Org      string                `json:"org"`
+				ThisWeek weekJ                 `json:"this_week"`
+				LastWeek weekJ                 `json:"last_week"`
+				Members  []gh.MemberStats      `json:"members"`
+				Repos    []gh.RepoContribution `json:"repos"`
 			}{
 				Org:      org,
 				ThisWeek: weekJ{Commits: thisWeek.stats.TotalCommits, PRs: thisWeek.stats.TotalPRs},
@@ -99,27 +98,46 @@ var teamCmd = &cobra.Command{
 			return enc.Encode(out)
 		}
 
-		greenBold := color.New(color.FgGreen, color.Bold)
-		cyanBold := color.New(color.FgCyan, color.Bold)
-		magentaBold := color.New(color.FgMagenta, color.Bold)
-
-		fmt.Println()
-		bold.Printf("Team Stats: %s", cyanBold.Sprint(org))
-		dim.Printf("  (%s – %s)\n", thisWeek.start.Format("Jan 2"), thisWeek.end.Format("Jan 2"))
+		render.Bold.Print("Team Stats")
+		render.Dim.Printf("  ·  %s  ·  %s → %s\n",
+			render.CyanBold.Sprint(org),
+			thisWeek.start.Format("Jan 2"), thisWeek.end.Format("Jan 2"))
 		fmt.Println()
 
-		// Week-over-week comparison
 		lastCommits, lastPRs := 0, 0
 		if lastWeek.stats != nil {
 			lastCommits = lastWeek.stats.TotalCommits
 			lastPRs = lastWeek.stats.TotalPRs
 		}
-		render.WeekComparison("Pull Requests", thisWeek.stats.TotalPRs, lastPRs, greenBold)
-		render.WeekComparison("Commits      ", thisWeek.stats.TotalCommits, lastCommits, cyanBold)
+		render.Bold.Println("This Week")
+		render.CompactWeekRow("Pull Requests", thisWeek.stats.TotalPRs, lastPRs, render.GreenBold)
+		render.CompactWeekRow("Commits", thisWeek.stats.TotalCommits, lastCommits, render.CyanBold)
+		render.CompactWeekRow("Total",
+			thisWeek.stats.TotalPRs+thisWeek.stats.TotalCommits,
+			lastPRs+lastCommits,
+			render.MagentaBold)
 		fmt.Println()
 
-		// Weekly trend charts
-		if weeks > 1 {
+		var allDays, allPRDays []gh.DayContribution
+		if lastWeek.stats != nil {
+			allDays = combineDays(thisWeek.stats.Days, lastWeek.stats.Days)
+			allPRDays = combineDays(thisWeek.stats.PRDays, lastWeek.stats.PRDays)
+		} else {
+			allDays = thisWeek.stats.Days
+			allPRDays = thisWeek.stats.PRDays
+		}
+
+		now := time.Now()
+		today := startOfDay(now)
+
+		if detailed {
+			renderDailyBars("Team Daily Commits (last 2 weeks)", allDays, today, color.New(color.FgCyan))
+			renderDailyBars("Team Daily PRs (last 2 weeks)", allPRDays, today, color.New(color.FgGreen))
+		} else {
+			renderSparklines(allDays, allPRDays, today)
+		}
+
+		if detailed && weeks > 1 {
 			weekCommits := make([]int, weeks)
 			weekPRs := make([]int, weeks)
 			weekLabels := make([]string, weeks)
@@ -132,71 +150,21 @@ var teamCmd = &cobra.Command{
 					weekLabels[i] = w.start.Format("Jan 02")
 				}
 			}
-
-			bold.Printf("Weekly Commits (%d weeks)\n", weeks)
+			render.Bold.Printf("Weekly Commits · last %d weeks\n", weeks)
 			render.VerticalBars(weekCommits, weekLabels, color.New(color.FgCyan))
 			fmt.Println()
-
-			bold.Printf("Weekly PRs (%d weeks)\n", weeks)
+			render.Bold.Printf("Weekly PRs · last %d weeks\n", weeks)
 			render.VerticalBars(weekPRs, weekLabels, color.New(color.FgGreen))
 			fmt.Println()
 		}
 
-		// Daily activity charts (this week + last week)
-		var allDays, allPRDays []gh.DayContribution
-		if lastWeek.stats != nil {
-			allDays = combineDays(thisWeek.stats.Days, lastWeek.stats.Days)
-			allPRDays = combineDays(thisWeek.stats.PRDays, lastWeek.stats.PRDays)
-		} else {
-			allDays = thisWeek.stats.Days
-			allPRDays = thisWeek.stats.PRDays
-		}
-
-		if len(allDays) > 0 {
-			dayValues := make([]int, len(allDays))
-			dayLabels := make([]string, len(allDays))
-			now := time.Now()
-			today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-			for i, d := range allDays {
-				dayValues[i] = d.Count
-				if d.Date.Equal(today) {
-					dayLabels[i] = "Today"
-				} else {
-					dayLabels[i] = d.Date.Format("Mon 02")
-				}
-			}
-			bold.Println("Team Daily Activity (last 2 weeks)")
-			render.VerticalBars(dayValues, dayLabels, color.New(color.FgCyan))
-			fmt.Println()
-		}
-
-		if len(allPRDays) > 0 {
-			prValues := make([]int, len(allPRDays))
-			prLabels := make([]string, len(allPRDays))
-			now := time.Now()
-			today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-			for i, d := range allPRDays {
-				prValues[i] = d.Count
-				if d.Date.Equal(today) {
-					prLabels[i] = "Today"
-				} else {
-					prLabels[i] = d.Date.Format("Mon 02")
-				}
-			}
-			bold.Println("Team Daily PRs (last 2 weeks)")
-			render.VerticalBars(prValues, prLabels, color.New(color.FgGreen))
-			fmt.Println()
-		}
-
-		// Member leaderboard
 		var lastMembers []gh.MemberStats
 		if lastWeek.stats != nil {
 			lastMembers = lastWeek.stats.Members
 		}
-		render.MemberLeaderboard("Member Activity (this week)", thisWeek.stats.Members, lastMembers, magentaBold)
+		render.MemberLeaderboard("Member Activity (this week)", thisWeek.stats.Members, lastMembers, render.MagentaBold)
 
-		// Repos
-		render.RepoBreakdown("Active Repos", thisWeek.stats.OrgRepos, cyanBold, 10)
+		render.RepoBreakdown("Active Repos", thisWeek.stats.OrgRepos, render.CyanBold, 10)
 
 		return nil
 	},

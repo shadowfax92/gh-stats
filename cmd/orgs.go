@@ -6,14 +6,18 @@ import (
 	"os"
 
 	"github.com/fatih/color"
+	"github.com/nickhudkins/gh-stats/render"
 	"github.com/spf13/cobra"
 )
 
 var orgsCmd = &cobra.Command{
-	Use:   "orgs",
-	Short: "List your GitHub organizations",
+	Use:         "orgs",
+	Short:       "List your GitHub organizations",
+	Annotations: map[string]string{"group": groupTeam},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		orgs, err := client.ListOrgs()
+		stop := startSpinner("Listing organizations...")
+		orgs, _, err := client.ListOrgsCached(fetchOpts())
+		stop()
 		if err != nil {
 			return err
 		}
@@ -24,28 +28,24 @@ var orgsCmd = &cobra.Command{
 			return enc.Encode(orgs)
 		}
 
-		bold := color.New(color.Bold)
-		dim := color.New(color.Faint)
-
-		bold.Println("Your Organizations")
+		render.Bold.Println("Your Organizations")
 		fmt.Println()
 
 		if len(orgs) == 0 {
-			dim.Println("  No organizations found.")
+			render.Dim.Println("  No organizations found.")
 			return nil
 		}
 
 		for _, org := range orgs {
 			fmt.Printf("  %s", color.New(color.FgCyan, color.Bold).Sprint(org.Login))
 			if org.Description != "" {
-				dim.Printf("  %s", org.Description)
+				render.Dim.Printf("  %s", org.Description)
 			}
 			fmt.Println()
 		}
 
 		fmt.Println()
-		dim.Println("Run: gh-stats team <org> to see team stats")
-
+		render.Dim.Println("Run: gh-stats team <org> to see team stats")
 		return nil
 	},
 }
