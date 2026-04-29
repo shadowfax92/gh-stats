@@ -9,13 +9,13 @@ import (
 
 var prsCmd = &cobra.Command{
 	Use:         "prs",
-	Short:       "Detailed pull request stats with weekly trend",
+	Short:       "Detailed pull request stats with daily breakdown",
 	Annotations: map[string]string{"group": groupViews},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return runWeeklyView("Pull Requests", color.New(color.FgGreen), render.GreenBold,
-			func(c *gh.Contributions) (int, []gh.RepoContribution) {
-				return c.TotalPRs, c.PRRepos
-			})
+		return runDailyView("Pull Requests",
+			color.New(color.FgGreen), render.GreenBold,
+			func(c *gh.Contributions) []gh.DayContribution { return c.PRDays },
+			func(c *gh.Contributions) []gh.RepoContribution { return c.PRRepos })
 	},
 }
 

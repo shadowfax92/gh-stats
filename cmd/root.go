@@ -14,7 +14,7 @@ import (
 
 var (
 	jsonOutput bool
-	weeks      int
+	days       int
 	username   string
 	noCache    bool
 	detailed   bool
@@ -32,7 +32,7 @@ const (
 var rootCmd = &cobra.Command{
 	Use:           "gh-stats",
 	Short:         "Personal GitHub contribution stats",
-	Long:          "View your GitHub contribution stats — PRs, commits, repos, day-over-day and week-over-week trends.",
+	Long:          "View your GitHub contribution stats — today's PRs and commits, day-over-day and week-over-week trends, sparklines.",
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
@@ -70,6 +70,16 @@ func fetchOpts() gh.FetchOptions {
 	return gh.FetchOptions{NoCache: noCache, CacheTTL: cacheTTL}
 }
 
+// weeksForDays returns how many week-blocks we need to fetch to cover `days`
+// days back from today. Slightly conservative.
+func weeksForDays(days int) int {
+	w := days/7 + 2
+	if w < 2 {
+		return 2
+	}
+	return w
+}
+
 func weekBounds(weeksAgo int) (time.Time, time.Time) {
 	now := time.Now()
 	today := startOfDay(now)
@@ -91,133 +101,201 @@ func startOfDay(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
 }
 
-func dashboard() error {
-	thisStart, thisEnd := weekBounds(0)
-	lastStart, lastEnd := weekBounds(1)
-
-	stop := startSpinner("Fetching contributions from GitHub...")
-	thisWeek, hit1, err := client.FetchContributionsCached(thisStart, thisEnd, fetchOpts())
-	if err != nil {
-		stop()
-		return err
+// fetchAllWeeks fetches the past N weeks (from oldest to current) of personal contribs.
+func fetchAllWeeks(numWeeks int) ([]*gh.Contributions, bool, error) {
+	all := make([]*gh.Contributions, numWeeks)
+	allCached := true
+	for i := 0; i < numWeeks; i++ {
+		start, end := weekBounds(numWeeks - 1 - i)
+		c, hit, err := client.FetchContributionsCached(start, end, fetchOpts())
+		if err != nil {
+			return nil, false, err
+		}
+		all[i] = c
+		if !hit {
+			allCached = false
+		}
 	}
-	lastWeek, hit2, err := client.FetchContributionsCached(lastStart, lastEnd, fetchOpts())
+	return all, allCached, nil
+}
+
+// aggregateDays merges per-week Days slices into a single ordered list (oldest → newest).
+func aggregateDays(weekly []*gh.Contributions, getter func(*gh.Contributions) []gh.DayContribution) []gh.DayContribution {
+	seen := map[string]gh.DayContribution{}
+	for _, w := range weekly {
+		for _, d := range getter(w) {
+			seen[d.Date.Format("2006-01-02")] = d
+		}
+	}
+	out := make([]gh.DayContribution, 0, len(seen))
+	for _, d := range seen {
+		out = append(out, d)
+	}
+	sortDays(out)
+	return out
+}
+
+// aggregateRepos merges per-week repo contributions into a single ranked list.
+func aggregateRepos(weekly []*gh.Contributions, getter func(*gh.Contributions) []gh.RepoContribution) []gh.RepoContribution {
+	totals := map[string]int{}
+	for _, w := range weekly {
+		for _, r := range getter(w) {
+			totals[r.Repo] += r.Count
+		}
+	}
+	out := make([]gh.RepoContribution, 0, len(totals))
+	for repo, count := range totals {
+		out = append(out, gh.RepoContribution{Repo: repo, Count: count})
+	}
+	for i := 1; i < len(out); i++ {
+		for j := i; j > 0 && out[j].Count > out[j-1].Count; j-- {
+			out[j], out[j-1] = out[j-1], out[j]
+		}
+	}
+	return out
+}
+
+func dashboard() error {
+	numWeeks := weeksForDays(days)
+
+	stop := startSpinner(fmt.Sprintf("Fetching %d weeks from GitHub...", numWeeks))
+	weekly, cached, err := fetchAllWeeks(numWeeks)
 	stop()
 	if err != nil {
 		return err
 	}
 
 	if jsonOutput {
-		return render.ContributionsJSON(thisWeek, lastWeek)
+		// Reuse the latest week vs prior week comparison for JSON.
+		this := weekly[len(weekly)-1]
+		var last *gh.Contributions
+		if len(weekly) > 1 {
+			last = weekly[len(weekly)-2]
+		}
+		return render.ContributionsJSON(this, last)
 	}
-
-	cached := hit1 && hit2
 
 	now := time.Now()
 	today := startOfDay(now)
 
+	commitDays := aggregateDays(weekly, func(c *gh.Contributions) []gh.DayContribution { return c.Days })
+	prDays := aggregateDays(weekly, func(c *gh.Contributions) []gh.DayContribution { return c.PRDays })
+
 	render.Bold.Print("GitHub Stats")
-	render.Dim.Printf("  ·  %s", username)
-	render.Dim.Printf("  ·  %s", today.Format("Mon Jan 2"))
+	render.Dim.Printf("  ·  %s  ·  %s", username, today.Format("Mon Jan 2"))
 	if cached {
 		render.Dim.Print("  ·  cached")
 	}
 	fmt.Println()
 	fmt.Println()
 
-	render.Bold.Println("This Week")
-	render.Dim.Printf("  %s → %s\n", thisStart.Format("Jan 2"), thisEnd.Format("Jan 2"))
-	render.CompactWeekRow("Pull Requests", thisWeek.TotalPRs, lastWeek.TotalPRs, render.GreenBold)
-	render.CompactWeekRow("Commits", thisWeek.TotalCommits, lastWeek.TotalCommits, render.CyanBold)
-	render.CompactWeekRow("Total", thisWeek.TotalPRs+thisWeek.TotalCommits, lastWeek.TotalPRs+lastWeek.TotalCommits, render.MagentaBold)
-	fmt.Println()
-
-	allDays := combineDays(thisWeek.Days, lastWeek.Days)
-	allPRDays := combineDays(thisWeek.PRDays, lastWeek.PRDays)
+	renderTodaySection(commitDays, prDays, today, "")
+	renderTrendsSection(commitDays, prDays, today)
 
 	if detailed {
-		renderDailyBars("Daily Commits (last 2 weeks)", allDays, today, color.New(color.FgCyan))
-		renderDailyBars("Daily PRs (last 2 weeks)", allPRDays, today, color.New(color.FgGreen))
+		renderDailyBars("Daily Commits · last "+fmt.Sprintf("%d", days)+" days",
+			render.FillDays(commitDays, today, days), today, color.New(color.FgCyan))
+		renderDailyBars("Daily PRs · last "+fmt.Sprintf("%d", days)+" days",
+			render.FillDays(prDays, today, days), today, color.New(color.FgGreen))
 	} else {
-		renderSparklines(allDays, allPRDays, today)
+		renderSparklineBlock(commitDays, prDays, today, days)
 	}
 
-	render.RepoBreakdown("Top Repos · commits this week", thisWeek.CommitRepos, render.CyanBold, 6)
-	if len(thisWeek.PRRepos) > 0 {
-		render.RepoBreakdown("Top Repos · PRs this week", thisWeek.PRRepos, render.GreenBold, 6)
+	thisStart, _ := weekBounds(0)
+	commitRepos := aggregateRepos(weekly, func(c *gh.Contributions) []gh.RepoContribution {
+		// Show repos for the current week only on the dashboard.
+		if c == weekly[len(weekly)-1] {
+			return c.CommitRepos
+		}
+		return nil
+	})
+	prRepos := aggregateRepos(weekly, func(c *gh.Contributions) []gh.RepoContribution {
+		if c == weekly[len(weekly)-1] {
+			return c.PRRepos
+		}
+		return nil
+	})
+
+	render.Bold.Print("Top Repos")
+	render.Dim.Printf("  ·  this week (%s → today)\n", thisStart.Format("Jan 2"))
+	render.RepoBreakdown("Commits", commitRepos, render.CyanBold, 6)
+	if len(prRepos) > 0 {
+		render.RepoBreakdown("PRs", prRepos, render.GreenBold, 6)
 	}
 
 	return nil
 }
 
-func renderSparklines(commitDays, prDays []gh.DayContribution, today time.Time) {
-	if len(commitDays) == 0 && len(prDays) == 0 {
-		return
-	}
+func renderTodaySection(commitDays, prDays []gh.DayContribution, today time.Time, indent string) {
+	commitsToday := render.CountOn(commitDays, today)
+	prsToday := render.CountOn(prDays, today)
 
-	commitVals, prVals, first, last := alignDayValues(commitDays, prDays, today, 14)
-	if commitVals == nil && prVals == nil {
-		return
-	}
-
-	render.Bold.Println("Last 14 days")
-	if commitVals != nil {
-		render.Cyan.Printf("  %s", render.Sparkline(commitVals))
-		render.Dim.Println("   commits")
-	}
-	if prVals != nil {
-		render.Green.Printf("  %s", render.Sparkline(prVals))
-		render.Dim.Println("   PRs")
-	}
-	pad := strings.Repeat(" ", maxInt(1, 14-len(first)-len(last)))
-	render.Dim.Printf("  %s%s%s\n", first, pad, last)
+	render.Bold.Println(indent + "Today")
+	fmt.Printf(indent+"  %-15s ", "Pull Requests")
+	render.Bold.Printf("%4d\n", prsToday)
+	fmt.Printf(indent+"  %-15s ", "Commits")
+	render.Bold.Printf("%4d\n", commitsToday)
 	fmt.Println()
 }
 
-func alignDayValues(commitDays, prDays []gh.DayContribution, today time.Time, window int) ([]int, []int, string, string) {
-	commitMap := map[string]int{}
-	for _, d := range commitDays {
-		commitMap[d.Date.Format("2006-01-02")] = d.Count
+func renderTrendsSection(commitDays, prDays []gh.DayContribution, today time.Time) {
+	yest := today.AddDate(0, 0, -1)
+	commitsToday := render.CountOn(commitDays, today)
+	commitsYest := render.CountOn(commitDays, yest)
+	prsToday := render.CountOn(prDays, today)
+	prsYest := render.CountOn(prDays, yest)
+
+	thisMon, thisSun := render.WeekBounds(today)
+	if thisSun.After(today) {
+		thisSun = today
 	}
-	prMap := map[string]int{}
-	for _, d := range prDays {
-		prMap[d.Date.Format("2006-01-02")] = d.Count
+	lastMon := thisMon.AddDate(0, 0, -7)
+	lastSun := thisMon.AddDate(0, 0, -1)
+
+	commitsThisWk := render.SumDays(commitDays, thisMon, thisSun)
+	commitsLastWk := render.SumDays(commitDays, lastMon, lastSun)
+	prsThisWk := render.SumDays(prDays, thisMon, thisSun)
+	prsLastWk := render.SumDays(prDays, lastMon, lastSun)
+
+	render.Bold.Println("Trends")
+	printTrendDualRow("Day-over-Day", prsToday, prsYest, commitsToday, commitsYest)
+	printTrendDualRow("Week-over-Week", prsThisWk, prsLastWk, commitsThisWk, commitsLastWk)
+	fmt.Println()
+}
+
+func printTrendDualRow(label string, prsCur, prsPrev, comCur, comPrev int) {
+	fmt.Printf("  %-16s ", label)
+	render.Dim.Print("PRs ")
+	render.PctColorInt(prsCur, prsPrev).Printf("%-7s", render.FormatPctInt(prsCur, prsPrev))
+	render.Dim.Print("   commits ")
+	render.PctColorInt(comCur, comPrev).Printf("%s", render.FormatPctInt(comCur, comPrev))
+	fmt.Println()
+}
+
+func renderSparklineBlock(commitDays, prDays []gh.DayContribution, today time.Time, n int) {
+	commits := render.FillDays(commitDays, today, n)
+	prs := render.FillDays(prDays, today, n)
+
+	commitVals := make([]int, len(commits))
+	prVals := make([]int, len(prs))
+	for i := range commits {
+		commitVals[i] = commits[i].Count
+	}
+	for i := range prs {
+		prVals[i] = prs[i].Count
 	}
 
-	commitVals := make([]int, window)
-	prVals := make([]int, window)
-	for i := 0; i < window; i++ {
-		d := today.AddDate(0, 0, -(window - 1 - i))
-		key := d.Format("2006-01-02")
-		commitVals[i] = commitMap[key]
-		prVals[i] = prMap[key]
-	}
-
-	first := today.AddDate(0, 0, -(window - 1)).Format("Jan 02")
+	first := commits[0].Date.Format("Jan 02")
 	last := "Today"
 
-	hasCommits := false
-	for _, v := range commitVals {
-		if v > 0 {
-			hasCommits = true
-			break
-		}
-	}
-	hasPRs := false
-	for _, v := range prVals {
-		if v > 0 {
-			hasPRs = true
-			break
-		}
-	}
-
-	if !hasCommits {
-		commitVals = nil
-	}
-	if !hasPRs {
-		prVals = nil
-	}
-	return commitVals, prVals, first, last
+	render.Bold.Printf("Last %d days\n", n)
+	render.Cyan.Printf("  %s", render.Sparkline(commitVals))
+	render.Dim.Println("   commits")
+	render.Green.Printf("  %s", render.Sparkline(prVals))
+	render.Dim.Println("   PRs")
+	pad := strings.Repeat(" ", maxInt(1, n-len(first)-len(last)))
+	render.Dim.Printf("  %s%s%s\n", first, pad, last)
+	fmt.Println()
 }
 
 func renderDailyBars(label string, days []gh.DayContribution, today time.Time, c *color.Color) {
@@ -243,23 +321,6 @@ func renderDailyBars(label string, days []gh.DayContribution, today time.Time, c
 	render.Bold.Println(label)
 	render.VerticalBars(values, labels, c)
 	fmt.Println()
-}
-
-func combineDays(thisWeek, lastWeek []gh.DayContribution) []gh.DayContribution {
-	seen := map[string]gh.DayContribution{}
-	for _, d := range lastWeek {
-		seen[d.Date.Format("2006-01-02")] = d
-	}
-	for _, d := range thisWeek {
-		seen[d.Date.Format("2006-01-02")] = d
-	}
-
-	var all []gh.DayContribution
-	for _, d := range seen {
-		all = append(all, d)
-	}
-	sortDays(all)
-	return all
 }
 
 func sortDays(days []gh.DayContribution) {
@@ -351,10 +412,10 @@ func init() {
 	cobra.AddTemplateFunc("groupedHelp", groupedHelp)
 
 	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output as JSON")
-	rootCmd.PersistentFlags().IntVar(&weeks, "weeks", 4, "Number of weeks for trends")
+	rootCmd.PersistentFlags().IntVar(&days, "days", 14, "Window in days for trends and charts")
 	rootCmd.PersistentFlags().StringVar(&username, "user", "", "GitHub username (auto-detected from gh)")
 	rootCmd.PersistentFlags().BoolVar(&noCache, "no-cache", false, "Bypass cache, force re-fetch")
-	rootCmd.PersistentFlags().BoolVarP(&detailed, "detailed", "d", false, "Show full daily bar charts and per-week trends")
+	rootCmd.PersistentFlags().BoolVarP(&detailed, "detailed", "d", false, "Show full daily bar charts instead of sparklines")
 	rootCmd.SetUsageTemplate(usageTemplate)
 }
 

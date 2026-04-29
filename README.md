@@ -2,20 +2,20 @@
 
 # 📊 gh-stats
 
-**GitHub contribution stats in your terminal.**
+**Daily GitHub contribution stats in your terminal.**
 
-*PRs, commits, repos, week-over-week trends — one command.*
+*Today, day-over-day, week-over-week — for you and your whole team.*
 
 </div>
 
-You want to know how your week is going without leaving the terminal. `gh-stats` pulls your contribution data from the GitHub GraphQL API, caches it, and renders a one-screen dashboard with sparklines and growth percentages — for yourself or your entire org.
+You want to know "how many PRs did I land today?" and "what's my team doing this week?" without leaving the terminal. `gh-stats` pulls your contribution data from the GitHub GraphQL API, caches it, and renders a daily dashboard with sparklines, growth percentages, and per-member breakdowns.
 
-- 📈 **One-screen dashboard** — this week vs last, with explicit growth %
-- 📅 **14-day sparklines** — commits and PRs in two compact lines
-- 📦 **Top repos** — see where your work is concentrated
-- 👥 **Team stats** — org-wide leaderboard with member breakdown
+- 📅 **Today first** — top-of-screen answer to "what did I/we ship today?"
+- 📈 **Growth %** — explicit day-over-day and week-over-week deltas, color-coded
+- ✨ **14-day sparklines** — commits and PRs per member at a glance
+- 👥 **Team breakdown** — per-member trends so you can spot velocity changes
 - ⚡ **Cached by default** — repeat runs are ~50ms instead of 5s
-- 🔍 **Detailed mode** — `-d` adds full daily bar charts and weekly trends
+- 🔍 **Detailed mode** — `-d` swaps sparklines for full daily bar charts
 - 🔧 **JSON output** — pipe data to `jq` or other tools with `--json`
 
 > Looking for AI token usage stats? See [`tokens`](https://github.com/shadowfax92/tokens) — Claude Code + Codex daily spend in the same dashboard format.
@@ -43,22 +43,23 @@ No separate token configuration needed — `gh-stats` uses your `gh` auth token 
 ## Quick Start
 
 ```sh
-gh-stats              # one-screen dashboard
-gh-stats -d           # detailed view with full daily bars
-gh-stats commits      # weekly commit trend + repos
-gh-stats team <org>   # team leaderboard for an org
+gh-stats                       # how am I doing today + last 14 days
+gh-stats team <org>            # how is my team doing today + per-member sparklines
+gh-stats commits               # daily commit chart with DoD / WoW
+gh-stats -d                    # detailed: full daily bars instead of sparklines
+gh-stats --days 30             # extend the trend window to 30 days
 ```
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `gh-stats` | Default dashboard — this week vs last, sparklines, top repos |
-| `gh-stats commits` | Weekly commit trend with full bar chart |
-| `gh-stats prs` | Weekly PR trend with full bar chart |
-| `gh-stats repos` | Repos ranked by combined commits + PRs |
+| `gh-stats` | Default dashboard — today, trends, 14-day sparklines, top repos |
+| `gh-stats commits` | Daily commits — today, DoD, WoW, daily bar chart, repos |
+| `gh-stats prs` | Daily PRs — same shape as commits |
+| `gh-stats repos` | Repos ranked by combined commits + PRs (this week) |
 | `gh-stats orgs` | List your GitHub organizations |
-| `gh-stats team <org>` | Team-wide stats for an org with member leaderboard |
+| `gh-stats team <org>` | Team-wide stats — today, DoD/WoW, per-member breakdown + sparklines |
 | `gh-stats team <org> --member <user>` | Filter team view to one member |
 | `gh-stats refresh` | Bust the cache and re-fetch |
 | `gh-stats cache` | Print cache path; `--clear` to delete it |
@@ -67,15 +68,25 @@ gh-stats team <org>   # team leaderboard for an org
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--weeks N` | `4` | Number of weeks for trend charts |
-| `-d, --detailed` | `false` | Show full daily bar charts and weekly trends |
+| `--days N` | `14` | Window in days for trends and charts |
+| `-d, --detailed` | `false` | Show full daily bar charts instead of sparklines |
 | `--no-cache` | `false` | Bypass cache, force re-fetch |
 | `--json` | `false` | JSON output |
 | `--user <login>` | auto-detected | GitHub username |
 
+## Team dashboard
+
+`gh-stats team <org>` is the killer view — today's totals, per-member breakdown, day-over-day and week-over-week trends per person, plus a 14-day sparkline row for each member:
+
+<div align="center">
+
+![gh-stats team](assets/team.svg)
+
+</div>
+
 ## Detailed mode
 
-`-d` switches the dashboard from sparklines to full vertical bar charts:
+`-d` switches sparklines for full vertical bar charts (works on dashboard, `commits`, `prs`, `team`):
 
 <div align="center">
 
@@ -85,7 +96,7 @@ gh-stats team <org>   # team leaderboard for an org
 
 ## Per-area deep dives
 
-`gh-stats commits` and `gh-stats prs` zoom in on one metric with the full weekly bar chart and a per-repo breakdown:
+`gh-stats commits` and `gh-stats prs` zoom in on one metric with a daily bar chart over the `--days` window:
 
 <div align="center">
 

@@ -23,6 +23,8 @@ type MemberStats struct {
 	Total       int                `json:"total"`
 	CommitRepos []RepoContribution `json:"commit_repos,omitempty"`
 	PRRepos     []RepoContribution `json:"pr_repos,omitempty"`
+	Days        []DayContribution  `json:"days,omitempty"`
+	PRDays      []DayContribution  `json:"pr_days,omitempty"`
 }
 
 type TeamStats struct {
@@ -141,6 +143,8 @@ func (c *Client) FetchTeamStats(org string, members []string, from, to time.Time
 			}
 		}
 		ms.Total = ms.Commits + ms.PRs
+		ms.Days = append([]DayContribution{}, r.contribs.Days...)
+		ms.PRDays = append([]DayContribution{}, r.contribs.PRDays...)
 		stats.TotalCommits += ms.Commits
 		stats.TotalPRs += ms.PRs
 		stats.Members = append(stats.Members, ms)

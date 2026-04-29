@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-const cacheVersion = 2
+const cacheVersion = 3
 
 type cacheEntry struct {
 	FetchedAt    time.Time      `json:"fetched_at"`
