@@ -44,6 +44,8 @@ No separate token configuration needed — `gh-stats` uses your `gh` auth token 
 ```sh
 gh-stats                       # how am I doing today + last 14 days
 gh-stats team <org>            # how is my team doing today + per-member breakdown
+gh-stats team <org> --prs      # raw merged PRs for org members
+gh-stats team <org> --commits  # raw commits for org members
 gh-stats commits               # daily commit chart with DoD / WoW
 gh-stats --days 30             # extend the trend window to 30 days
 ```
@@ -59,6 +61,8 @@ gh-stats --days 30             # extend the trend window to 30 days
 | `gh-stats orgs` | List your GitHub organizations |
 | `gh-stats team <org>` | Team-wide stats — today, DoD/WoW, per-member breakdown + sparklines |
 | `gh-stats team <org> --member <user>` | Filter team view to one member |
+| `gh-stats team <org> --prs` | Merged PR rows for org members, grouped by day |
+| `gh-stats team <org> --commits` | Commit rows for org members, grouped by day |
 | `gh-stats refresh` | Bust the cache and re-fetch |
 | `gh-stats cache` | Print cache path; `--clear` to delete it |
 
@@ -71,6 +75,13 @@ gh-stats --days 30             # extend the trend window to 30 days
 | `--json` | `false` | JSON output |
 | `--user <login>` | auto-detected | GitHub username |
 
+`team --prs` and `team --commits` support `--json` for automation. The JSON shape is day-grouped:
+
+```sh
+gh-stats team browseros-ai --prs --days 7 --json
+gh-stats team browseros-ai --commits --days 7 --json
+```
+
 ## Team dashboard
 
 `gh-stats team <org>` is the killer view — today's totals, per-member breakdown, day-over-day and week-over-week trends per person, plus a 14-day sparkline row for each member:
@@ -80,6 +91,20 @@ gh-stats --days 30             # extend the trend window to 30 days
 ![gh-stats team](assets/team.svg)
 
 </div>
+
+## engprod-daily skill
+
+This repo includes `skills/engprod-daily/`, a local report skill that uses `gh-stats` as its raw GitHub activity source. It expects a small config with a GitHub org and engineers:
+
+```yaml
+name: browseros
+org: browseros-ai
+engineers:
+  - DaniAkash
+  - felarof99
+```
+
+The skill writes local HTML/JSON reports under `reports/<name>/<date>/` and does not publish or post to Slack.
 
 ## Per-area deep dives
 

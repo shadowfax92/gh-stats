@@ -13,7 +13,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var memberFilter string
+var (
+	memberFilter string
+	teamPRs      bool
+	teamCommits  bool
+)
 
 var teamCmd = &cobra.Command{
 	Use:         "team <org>",
@@ -23,6 +27,9 @@ var teamCmd = &cobra.Command{
 	Args:        cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		org := args[0]
+		if teamPRs && teamCommits {
+			return fmt.Errorf("--prs and --commits are mutually exclusive")
+		}
 
 		stop := startSpinner(fmt.Sprintf("Listing %s members...", org))
 		members, _, err := client.ListOrgMembersCached(org, fetchOpts())
@@ -46,6 +53,13 @@ var teamCmd = &cobra.Command{
 			if !found {
 				return fmt.Errorf("member %q not found in org %s", memberFilter, org)
 			}
+		}
+
+		if teamPRs {
+			return runTeamPullRequestDetails(org, members)
+		}
+		if teamCommits {
+			return runTeamCommitDetails(org, members)
 		}
 
 		numWeeks := weeksForDays(days)
@@ -310,5 +324,7 @@ func renderMemberSparklines(label string, members []gh.MemberStats, perMember ma
 
 func init() {
 	teamCmd.Flags().StringVar(&memberFilter, "member", "", "Filter to a specific team member")
+	teamCmd.Flags().BoolVar(&teamPRs, "prs", false, "List merged PRs for team members")
+	teamCmd.Flags().BoolVar(&teamCommits, "commits", false, "List commits for team members")
 	rootCmd.AddCommand(teamCmd)
 }
