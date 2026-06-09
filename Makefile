@@ -1,10 +1,13 @@
 BINARY := gh-stats
 GOBIN := $(shell go env GOPATH)/bin
 
-.PHONY: build install completions clean
+.PHONY: build test install completions clean
 
 build:
 	go build -o $(BINARY) .
+
+test:
+	go test ./...
 
 install: build
 	cp $(BINARY) $(GOBIN)/$(BINARY)
