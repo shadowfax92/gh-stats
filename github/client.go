@@ -36,31 +36,27 @@ type Contributions struct {
 
 const graphqlEndpoint = "https://api.github.com/graphql"
 
+// Per-day commit counts come from commitContributionsByRepository's commitCount
+// nodes (true commits), NOT contributionCalendar — the calendar's contributionCount
+// folds in PRs, issues and reviews, which would double-count the PR row.
 const contributionsQuery = `query($login: String!, $from: DateTime!, $to: DateTime!) {
   user(login: $login) {
     contributionsCollection(from: $from, to: $to) {
       totalCommitContributions
       totalPullRequestContributions
-      contributionCalendar {
-        weeks {
-          contributionDays {
-            contributionCount
-            date
-          }
-        }
-      }
       commitContributionsByRepository(maxRepositories: 25) {
         repository { nameWithOwner }
-        contributions { totalCount }
+        contributions(first: 100) {
+          totalCount
+          nodes { occurredAt commitCount }
+        }
       }
       pullRequestContributionsByRepository(maxRepositories: 25) {
         repository { nameWithOwner }
         contributions { totalCount }
       }
       pullRequestContributions(first: 100) {
-        nodes {
-          occurredAt
-        }
+        nodes { occurredAt }
       }
     }
   }
@@ -75,22 +71,18 @@ type graphqlResponse struct {
 	Data struct {
 		User struct {
 			ContributionsCollection struct {
-				TotalCommitContributions      int `json:"totalCommitContributions"`
-				TotalPullRequestContributions int `json:"totalPullRequestContributions"`
-				ContributionCalendar          struct {
-					Weeks []struct {
-						ContributionDays []struct {
-							ContributionCount int    `json:"contributionCount"`
-							Date              string `json:"date"`
-						} `json:"contributionDays"`
-					} `json:"weeks"`
-				} `json:"contributionCalendar"`
+				TotalCommitContributions        int `json:"totalCommitContributions"`
+				TotalPullRequestContributions   int `json:"totalPullRequestContributions"`
 				CommitContributionsByRepository []struct {
 					Repository struct {
 						NameWithOwner string `json:"nameWithOwner"`
 					} `json:"repository"`
 					Contributions struct {
 						TotalCount int `json:"totalCount"`
+						Nodes      []struct {
+							OccurredAt  string `json:"occurredAt"`
+							CommitCount int    `json:"commitCount"`
+						} `json:"nodes"`
 					} `json:"contributions"`
 				} `json:"commitContributionsByRepository"`
 				PullRequestContributionsByRepository []struct {
@@ -161,26 +153,37 @@ func (c *Client) FetchContributions(from, to time.Time) (*Contributions, error) 
 		return nil, fmt.Errorf("GraphQL error: %s", gqlResp.Errors[0].Message)
 	}
 
-	col := gqlResp.Data.User.ContributionsCollection
+	return buildContributions(&gqlResp, from, to), nil
+}
+
+// buildContributions assembles a Contributions from a decoded GraphQL response.
+// It is the pure, HTTP-free seam that owns all day bucketing: every contribution
+// day is attributed to the user's *local* calendar day (from.Location(), which is
+// time.Local in real runs), so "today" lines up with what cmd computes from
+// time.Now(). Commit days come from per-repo commitCount nodes (true commits), not
+// the contributionCalendar, which would fold PRs/issues/reviews into "Commits".
+func buildContributions(resp *graphqlResponse, from, to time.Time) *Contributions {
+	loc := from.Location()
+	fromKey := from.Format("2006-01-02")
+	toKey := to.Format("2006-01-02")
+
+	col := resp.Data.User.ContributionsCollection
 	result := &Contributions{
 		TotalCommits: col.TotalCommitContributions,
 		TotalPRs:     col.TotalPullRequestContributions,
 	}
 
-	for _, week := range col.ContributionCalendar.Weeks {
-		for _, day := range week.ContributionDays {
-			t, err := time.Parse("2006-01-02", day.Date)
+	commitDayCounts := map[string]int{}
+	for _, repo := range col.CommitContributionsByRepository {
+		for _, node := range repo.Contributions.Nodes {
+			t, err := time.Parse(time.RFC3339, node.OccurredAt)
 			if err != nil {
 				continue
 			}
-			if (t.Equal(from) || t.After(from)) && (t.Before(to) || t.Equal(to)) {
-				result.Days = append(result.Days, DayContribution{
-					Date:  t,
-					Count: day.ContributionCount,
-				})
-			}
+			commitDayCounts[t.In(loc).Format("2006-01-02")] += node.CommitCount
 		}
 	}
+	result.Days = daysInRange(commitDayCounts, loc, fromKey, toKey)
 
 	prDayCounts := map[string]int{}
 	for _, node := range col.PullRequestContributions.Nodes {
@@ -188,18 +191,9 @@ func (c *Client) FetchContributions(from, to time.Time) (*Contributions, error) 
 		if err != nil {
 			continue
 		}
-		dateKey := t.Format("2006-01-02")
-		prDayCounts[dateKey]++
+		prDayCounts[t.In(loc).Format("2006-01-02")]++
 	}
-	for dateKey, count := range prDayCounts {
-		t, _ := time.Parse("2006-01-02", dateKey)
-		if (t.Equal(from) || t.After(from)) && (t.Before(to) || t.Equal(to)) {
-			result.PRDays = append(result.PRDays, DayContribution{Date: t, Count: count})
-		}
-	}
-	sort.Slice(result.PRDays, func(i, j int) bool {
-		return result.PRDays[i].Date.Before(result.PRDays[j].Date)
-	})
+	result.PRDays = daysInRange(prDayCounts, loc, fromKey, toKey)
 
 	for _, r := range col.CommitContributionsByRepository {
 		result.CommitRepos = append(result.CommitRepos, RepoContribution{
@@ -221,5 +215,25 @@ func (c *Client) FetchContributions(from, to time.Time) (*Contributions, error) 
 		return result.PRRepos[i].Count > result.PRRepos[j].Count
 	})
 
-	return result, nil
+	return result
+}
+
+// daysInRange turns a local-date-keyed count map into a sorted slice, keeping only
+// days within [fromKey, toKey] inclusive. The bound check is a string compare (same
+// as render.SumDays) so a day at the window edge isn't dropped by a UTC-vs-local
+// offset; dates are parsed in loc so they round-trip to the key cmd/render formats.
+func daysInRange(counts map[string]int, loc *time.Location, fromKey, toKey string) []DayContribution {
+	out := make([]DayContribution, 0, len(counts))
+	for key, count := range counts {
+		if key < fromKey || key > toKey {
+			continue
+		}
+		t, err := time.ParseInLocation("2006-01-02", key, loc)
+		if err != nil {
+			continue
+		}
+		out = append(out, DayContribution{Date: t, Count: count})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Date.Before(out[j].Date) })
+	return out
 }
