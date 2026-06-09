@@ -168,6 +168,8 @@ func buildContributions(resp *graphqlResponse, from, to time.Time) *Contribution
 	toKey := to.Format("2006-01-02")
 
 	col := resp.Data.User.ContributionsCollection
+	// Period totals over GitHub's from/to window — NOT the sum of the local-bucketed
+	// daily arrays below; the two can differ at the local-vs-UTC day boundary.
 	result := &Contributions{
 		TotalCommits: col.TotalCommitContributions,
 		TotalPRs:     col.TotalPullRequestContributions,
