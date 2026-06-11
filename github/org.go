@@ -46,8 +46,7 @@ func (c *Client) restGet(path string) ([]byte, error) {
 	req.Header.Set("Authorization", "Bearer "+c.Token)
 	req.Header.Set("Accept", "application/vnd.github+json")
 
-	httpClient := &http.Client{Timeout: 30 * time.Second}
-	resp, err := httpClient.Do(req)
+	resp, err := c.httpClient().Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -59,9 +58,19 @@ func (c *Client) restGet(path string) ([]byte, error) {
 	}
 
 	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("GitHub API %s returned %d: %s", path, resp.StatusCode, string(body))
+		return nil, &APIError{Path: path, StatusCode: resp.StatusCode, Body: string(body)}
 	}
 	return body, nil
+}
+
+type APIError struct {
+	Path       string
+	StatusCode int
+	Body       string
+}
+
+func (e *APIError) Error() string {
+	return fmt.Sprintf("GitHub API %s returned %d: %s", e.Path, e.StatusCode, e.Body)
 }
 
 func (c *Client) ListOrgs() ([]Org, error) {

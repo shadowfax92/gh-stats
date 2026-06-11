@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>engprod daily · {{config_name}} · {{target_date}}</title>
+  <style>
+    :root {
+      --bg: #fafafa;
+      --surface: #ffffff;
+      --fg: #1a1a1a;
+      --muted: #666666;
+      --faint: #999999;
+      --border: #e2e2e2;
+      --border-strong: #cccccc;
+      --accent: #2b6cb0;
+      --accent-bg: #eaf3fb;
+      --score-bg: #2b6cb0;
+      --score-fg: #ffffff;
+      --good: #2d5a3f;
+      --good-bg: #e7f4ed;
+      --warn: #8a3b2b;
+      --warn-bg: #fbecea;
+      --chip-bg: #f0f0f0;
+      --code-bg: #f4f4f4;
+
+      --type-feature:  #4ca3ff;
+      --type-bugfix:   #e4794b;
+      --type-refactor: #a76cff;
+      --type-chore:    #8c8c8c;
+      --type-test:     #2fa36b;
+      --type-docs:     #d0a02a;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      max-width: 1080px;
+      margin: 2rem auto;
+      padding: 0 1.25rem 4rem;
+    }
+
+    header.top {
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 1rem;
+      margin-bottom: 1rem;
+    }
+    header.top h1 { font-size: 1.4rem; margin: 0; font-weight: 600; }
+    header.top .subtitle { color: var(--muted); margin-top: 0.25rem; font-size: 0.95rem; }
+    header.top .totals { color: var(--fg); margin-top: 0.5rem; font-size: 0.95rem; }
+    header.top .totals .sep { color: var(--faint); margin: 0 0.5rem; }
+
+    details { margin: 0.25rem 0; }
+    details > summary {
+      cursor: pointer;
+      padding: 0.6rem 0.5rem;
+      list-style: none;
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+      border-radius: 4px;
+      transition: background 0.1s;
+    }
+    details > summary:hover { background: var(--accent-bg); }
+    details > summary::-webkit-details-marker { display: none; }
+    details > summary::before {
+      content: "▶";
+      color: var(--muted);
+      font-size: 0.75rem;
+      width: 0.75rem;
+      display: inline-block;
+      transition: transform 0.15s;
+    }
+    details[open] > summary::before { content: "▼"; }
+
+    details.day {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface);
+      padding: 0.25rem 0.75rem;
+      margin-bottom: 1rem;
+    }
+    details.day > summary { font-size: 1.15rem; font-weight: 600; padding: 0.75rem 0.25rem; }
+
+    details.engineer {
+      border-top: 1px solid var(--border);
+      padding: 0 0.5rem;
+    }
+    details.engineer:first-of-type { border-top: 0; }
+    details.engineer > summary .github-name {
+      font-weight: 600;
+      min-width: 180px;
+    }
+    details.engineer > summary .display-name {
+      color: var(--muted);
+      font-weight: 400;
+      margin-left: -0.25rem;
+    }
+    details.engineer > summary .pills {
+      color: var(--muted);
+      font-size: 0.9rem;
+      margin-left: auto;
+    }
+    details.engineer > summary .pills .sep { color: var(--faint); margin: 0 0.35rem; }
+    details.engineer > summary .no-activity {
+      color: var(--faint);
+      font-style: italic;
+      margin-left: auto;
+      font-size: 0.9rem;
+    }
+
+    .engineer-body { padding: 0.25rem 1.5rem 0.75rem; }
+
+    .pr-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--border-strong);
+      border-radius: 6px;
+      padding: 0.75rem 1rem;
+      margin: 0.6rem 0;
+    }
+    .pr-card.type-feature   { border-left-color: var(--type-feature); }
+    .pr-card.type-bugfix    { border-left-color: var(--type-bugfix); }
+    .pr-card.type-refactor  { border-left-color: var(--type-refactor); }
+    .pr-card.type-chore     { border-left-color: var(--type-chore); }
+    .pr-card.type-test      { border-left-color: var(--type-test); }
+    .pr-card.type-docs      { border-left-color: var(--type-docs); }
+
+    .pr-card header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 0.75rem;
+    }
+    .pr-card .subject { font-weight: 500; }
+    .pr-card .pr-link {
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .pr-card .pr-link:hover { text-decoration: underline; }
+    .pr-card .score {
+      background: var(--score-bg);
+      color: var(--score-fg);
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      font-weight: 600;
+      font-size: 0.85rem;
+      white-space: nowrap;
+    }
+    .pr-card .meta {
+      color: var(--muted);
+      font-size: 0.85rem;
+      margin-top: 0.3rem;
+    }
+    .pr-card .meta .chip {
+      background: var(--chip-bg);
+      padding: 0.05rem 0.4rem;
+      border-radius: 3px;
+      margin-right: 0.25rem;
+    }
+    .pr-card .reasoning {
+      margin: 0.6rem 0;
+      color: var(--fg);
+    }
+    .pr-card ul.highlights,
+    .pr-card ul.concerns {
+      margin: 0.25rem 0;
+      padding-left: 1.25rem;
+    }
+    .pr-card ul.highlights { color: var(--good); }
+    .pr-card ul.concerns   { color: var(--warn); }
+
+    .loose-commits {
+      margin-top: 0.75rem;
+      padding: 0.5rem 0.75rem;
+      background: var(--code-bg);
+      border-radius: 4px;
+      font-size: 0.9rem;
+    }
+    .loose-commits .label {
+      color: var(--muted);
+      font-weight: 600;
+      display: block;
+      margin-bottom: 0.25rem;
+    }
+    .loose-commits ul { margin: 0; padding-left: 1.5rem; }
+    .loose-commits code {
+      background: var(--surface);
+      padding: 0 0.3rem;
+      border-radius: 3px;
+      border: 1px solid var(--border);
+      font-size: 0.85rem;
+    }
+    .loose-commits .type {
+      color: var(--faint);
+      font-size: 0.85rem;
+      margin-left: 0.25rem;
+    }
+
+    footer.meta {
+      color: var(--faint);
+      font-size: 0.8rem;
+      margin-top: 2rem;
+      border-top: 1px solid var(--border);
+      padding-top: 0.75rem;
+    }
+
+    .errors {
+      background: var(--warn-bg);
+      border: 1px solid var(--warn);
+      border-radius: 6px;
+      padding: 0.75rem 1rem;
+      margin-bottom: 1rem;
+      color: var(--warn);
+      font-size: 0.9rem;
+    }
+    .errors h3 { margin: 0 0 0.4rem; font-size: 1rem; }
+    .errors ul { margin: 0; padding-left: 1.25rem; }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <h1>engprod daily · {{config_name}}</h1>
+    <div class="subtitle">{{target_date}}</div>
+    <div class="totals">
+      <span>{{totals.pr_count}} PRs</span><span class="sep">·</span>
+      <span>{{totals.commit_count}} commits</span><span class="sep">·</span>
+      <span>+{{totals.loc_added}} / −{{totals.loc_removed}}</span>
+    </div>
+  </header>
+
+  <!-- Optional: render only if errors.length > 0 -->
+  {{#if errors.length}}
+  <div class="errors">
+    <h3>Analyzer errors ({{errors.length}})</h3>
+    <ul>
+      {{#each errors}}<li><code>{{unit_id}}</code> — {{error}}</li>{{/each}}
+    </ul>
+  </div>
+  {{/if}}
+
+  <main>
+    <details class="day" open>
+      <summary>{{target_date}}</summary>
+
+      {{#each engineers}}
+      <details class="engineer" {{#if has_activity}}open{{/if}}>
+        <summary>
+          <span class="github-name">{{github}}</span>
+          {{#if display_name}}<span class="display-name">· {{display_name}}</span>{{/if}}
+          {{#if has_activity}}
+          <span class="pills">
+            {{totals.pr_count}} PRs<span class="sep">·</span>
+            {{totals.commit_count}} commits<span class="sep">·</span>
+            median {{totals.median_score}}<span class="sep">·</span>
+            top-3 {{totals.top3_mean}}
+          </span>
+          {{else}}
+          <span class="no-activity">(no activity)</span>
+          {{/if}}
+        </summary>
+
+        <div class="engineer-body">
+          {{#each prs}}
+          <article class="pr-card type-{{type}}">
+            <header>
+              <span class="subject">
+                {{#if pr_url}}<a class="pr-link" href="{{pr_url}}">#{{number}}</a>{{else}}<span class="pr-link">#{{number}}</span>{{/if}}
+                {{subject}}
+              </span>
+              <span class="score">{{final_score}}</span>
+            </header>
+            <div class="meta">
+              <span class="chip">{{repo}}</span>
+              <span class="chip">{{branch}}</span>
+              <span class="chip">+{{insertions}} / −{{deletions}}</span>
+              <span class="chip">{{type}}</span>
+              <span class="chip">{{difficulty}}</span>
+              <span class="chip">impact {{impact_score}}</span>
+              {{#if truncated}}<span class="chip">diff truncated</span>{{/if}}
+            </div>
+            <div class="reasoning">{{reasoning}}</div>
+            {{#if highlights.length}}
+            <ul class="highlights">
+              {{#each highlights}}<li>{{.}}</li>{{/each}}
+            </ul>
+            {{/if}}
+            {{#if concerns.length}}
+            <ul class="concerns">
+              {{#each concerns}}<li>{{.}}</li>{{/each}}
+            </ul>
+            {{/if}}
+          </article>
+          {{/each}}
+
+          {{#if loose_commits.length}}
+          <div class="loose-commits">
+            <span class="label">Loose commits ({{loose_commits.length}})</span>
+            <ul>
+              {{#each loose_commits}}
+              <li><code>{{sha_short}}</code> {{subject}}<span class="type">— {{type}}</span></li>
+              {{/each}}
+            </ul>
+          </div>
+          {{/if}}
+        </div>
+      </details>
+      {{/each}}
+    </details>
+  </main>
+
+  <footer class="meta">
+    Generated {{generated_at}} · engprod-daily
+  </footer>
+</body>
+</html>

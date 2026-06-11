@@ -11,8 +11,9 @@ import (
 )
 
 type Client struct {
-	Token    string
-	Username string
+	Token      string
+	Username   string
+	HTTPClient *http.Client
 }
 
 type DayContribution struct {
@@ -128,8 +129,7 @@ func (c *Client) FetchContributions(from, to time.Time) (*Contributions, error) 
 	req.Header.Set("Authorization", "Bearer "+c.Token)
 	req.Header.Set("Content-Type", "application/json")
 
-	httpClient := &http.Client{Timeout: 30 * time.Second}
-	resp, err := httpClient.Do(req)
+	resp, err := c.httpClient().Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -238,4 +238,11 @@ func daysInRange(counts map[string]int, loc *time.Location, fromKey, toKey strin
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Date.Before(out[j].Date) })
 	return out
+}
+
+func (c *Client) httpClient() *http.Client {
+	if c.HTTPClient != nil {
+		return c.HTTPClient
+	}
+	return &http.Client{Timeout: 30 * time.Second}
 }
