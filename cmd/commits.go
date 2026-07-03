@@ -37,6 +37,7 @@ func runDailyView(label string, barColor *color.Color, headerColor *color.Color,
 	now := time.Now()
 	today := startOfDay(now)
 	dayData := aggregateDays(weekly, dayGetter)
+	filled := render.FillDays(dayData, today, days)
 
 	headerColor.Print(label)
 	render.Dim.Printf("  ·  %s\n", today.Format("Mon Jan 2"))
@@ -55,10 +56,7 @@ func runDailyView(label string, barColor *color.Color, headerColor *color.Color,
 	thisWk := render.SumDays(dayData, thisMon, thisSun)
 	lastWk := render.SumDays(dayData, lastMon, lastSun)
 
-	render.Bold.Println("Today")
-	fmt.Printf("  %-15s ", label)
-	render.Bold.Printf("%4d\n", todayCount)
-	fmt.Println()
+	renderWindowSummary(windowSummaryLabel(days), "", summaryMetric{label, sumContributionDays(filled)})
 
 	render.Bold.Println("Trends")
 	fmt.Printf("  %-16s ", "Day-over-Day")
@@ -69,7 +67,6 @@ func runDailyView(label string, barColor *color.Color, headerColor *color.Color,
 	render.PctColorInt(thisWk, lastWk).Printf("%s\n", render.FormatPctInt(thisWk, lastWk))
 	fmt.Println()
 
-	filled := render.FillDays(dayData, today, days)
 	values := make([]int, len(filled))
 	labels := make([]string, len(filled))
 	todayKey := today.Format("2006-01-02")
