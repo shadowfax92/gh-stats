@@ -6,6 +6,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	gh "github.com/nickhudkins/gh-stats/github"
 	"github.com/nickhudkins/gh-stats/render"
@@ -14,13 +15,14 @@ import (
 
 var reposCmd = &cobra.Command{
 	Use:         "repos",
-	Short:       "Contribution breakdown by repository (this week)",
+	Short:       "Contribution breakdown by repository",
 	Annotations: map[string]string{"group": groupViews},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		thisStart, thisEnd := weekBounds(0)
+		today := startOfDay(time.Now())
+		windowStart, windowEnd := windowBounds(today, days)
 
 		stop := startSpinner("Fetching contributions from GitHub...")
-		contribs, _, err := client.FetchContributionsCached(thisStart, thisEnd, fetchOpts())
+		contribs, _, err := client.FetchContributionsCached(windowStart, windowEnd, fetchOpts())
 		stop()
 		if err != nil {
 			return err
@@ -35,11 +37,11 @@ var reposCmd = &cobra.Command{
 		}
 
 		render.Bold.Print("Repos")
-		render.Dim.Printf("  ·  %s → %s\n", thisStart.Format("Jan 2"), thisEnd.Format("Jan 2"))
+		render.Dim.Printf("  ·  %s\n", windowSummaryLabel(days))
 		fmt.Println()
 
 		if len(merged) == 0 {
-			render.Dim.Println("  No contributions this week.")
+			render.Dim.Println("  No contributions in this window.")
 			return nil
 		}
 

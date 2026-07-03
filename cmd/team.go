@@ -17,8 +17,8 @@ var memberFilter string
 
 var teamCmd = &cobra.Command{
 	Use:         "team <org>",
-	Short:       "Team contribution stats — today, trends, per-member breakdown",
-	Long:        "View team-level GitHub stats for an organization you belong to.\nShows today's totals + per-member breakdown + per-member sparklines for the last N days.",
+	Short:       "Team contribution stats with per-member breakdown",
+	Long:        "View team-level GitHub stats for an organization you belong to.\nShows window totals, trends, per-member breakdowns, and per-member sparklines for the last N days.",
 	Annotations: map[string]string{"group": groupTeam},
 	Args:        cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -72,7 +72,6 @@ var teamCmd = &cobra.Command{
 		now := time.Now()
 		today := startOfDay(now)
 
-		// Aggregate team-wide and per-member daily data across all fetched weeks.
 		teamCommitDays := []gh.DayContribution{}
 		teamPRDays := []gh.DayContribution{}
 		memberCommitDays := map[string][]gh.DayContribution{}
@@ -108,9 +107,11 @@ var teamCmd = &cobra.Command{
 			today.Format("Mon Jan 2"))
 		fmt.Println()
 
-		renderTodaySection(teamCommitDays, teamPRDays, today, "")
+		renderWindowSummary(windowSummaryLabel(days), "",
+			summaryMetric{"Pull Requests", sumContributionDays(render.FillDays(teamPRDays, today, days))},
+			summaryMetric{"Commits", sumContributionDays(render.FillDays(teamCommitDays, today, days))})
 		renderTrendsSection(teamCommitDays, teamPRDays, today)
-		renderTodayByMember(this.stats.Members, memberCommitDays, memberPRDays, today)
+		renderWindowByMember(this.stats.Members, memberCommitDays, memberPRDays, today, days)
 		renderTrendByMember(this.stats.Members, memberCommitDays, memberPRDays, today)
 
 		renderDailyBars(fmt.Sprintf("Team Commits · last %d days", days),
@@ -146,32 +147,41 @@ func mergeDays(existing, incoming []gh.DayContribution) []gh.DayContribution {
 	return out
 }
 
-func renderTodayByMember(members []gh.MemberStats, commitDaysByMember, prDaysByMember map[string][]gh.DayContribution, today time.Time) {
-	type row struct {
-		name    string
-		commits int
-		prs     int
-		total   int
-	}
-	rows := make([]row, 0, len(members))
+type memberWindowRow struct {
+	name    string
+	commits int
+	prs     int
+	total   int
+}
+
+// windowMemberRows totals each member over the active date window and sorts by activity.
+func windowMemberRows(members []gh.MemberStats, commitDaysByMember, prDaysByMember map[string][]gh.DayContribution, today time.Time, days int) []memberWindowRow {
+	rows := make([]memberWindowRow, 0, len(members))
 	for _, m := range members {
-		c := render.CountOn(commitDaysByMember[m.Username], today)
-		p := render.CountOn(prDaysByMember[m.Username], today)
+		c := sumContributionDays(render.FillDays(commitDaysByMember[m.Username], today, days))
+		p := sumContributionDays(render.FillDays(prDaysByMember[m.Username], today, days))
 		if c == 0 && p == 0 {
 			continue
 		}
-		rows = append(rows, row{m.Username, c, p, c + p})
-	}
-	if len(rows) == 0 {
-		render.Bold.Println("Today by Member")
-		render.Dim.Println("  No activity today.")
-		fmt.Println()
-		return
+		rows = append(rows, memberWindowRow{m.Username, c, p, c + p})
 	}
 	for i := 1; i < len(rows); i++ {
 		for j := i; j > 0 && rows[j].total > rows[j-1].total; j-- {
 			rows[j], rows[j-1] = rows[j-1], rows[j]
 		}
+	}
+	return rows
+}
+
+// renderWindowByMember ranks members by total activity in the active date window.
+func renderWindowByMember(members []gh.MemberStats, commitDaysByMember, prDaysByMember map[string][]gh.DayContribution, today time.Time, days int) {
+	rows := windowMemberRows(members, commitDaysByMember, prDaysByMember, today, days)
+	label := windowSummaryLabel(days) + " by Member"
+	if len(rows) == 0 {
+		render.Bold.Println(label)
+		render.Dim.Println("  No activity in this window.")
+		fmt.Println()
+		return
 	}
 
 	maxTotal := rows[0].total
@@ -185,7 +195,7 @@ func renderTodayByMember(members []gh.MemberStats, commitDaysByMember, prDaysByM
 		labelW = 20
 	}
 
-	render.Bold.Println("Today by Member")
+	render.Bold.Println(label)
 	barWidth := 16
 	for _, r := range rows {
 		filled := r.total * barWidth / maxInt(1, maxTotal)

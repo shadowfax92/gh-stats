@@ -2,15 +2,15 @@
 
 # 📊 gh-stats
 
-**Daily GitHub contribution stats in your terminal.**
+**Windowed GitHub contribution stats in your terminal.**
 
-*Today, day-over-day, week-over-week — for you and your whole team.*
+*Totals, day-over-day, week-over-week — for you and your whole team.*
 
 </div>
 
-You want to know "how many PRs did I land today?" and "what's my team doing this week?" without leaving the terminal. `gh-stats` pulls your contribution data from the GitHub GraphQL API, caches it, and renders a daily dashboard with sparklines, growth percentages, and per-member breakdowns.
+You want to know "how many PRs did I land this window?" and "what's my team doing?" without leaving the terminal. `gh-stats` pulls your contribution data from the GitHub GraphQL API, caches it, and renders a windowed dashboard with daily charts, growth percentages, and per-member breakdowns.
 
-- 📅 **Today first** — top-of-screen answer to "what did I/we ship today?"
+- 📅 **Window totals first** — top-of-screen answer to "what did I/we ship over `--days`?"
 - 📈 **Growth %** — explicit day-over-day and week-over-week deltas, color-coded
 - 📊 **Daily bar charts** — 14 days of commits and PRs with per-day labels and values
 - 👥 **Team breakdown** — per-member sparklines and DoD/WoW trends
@@ -42,22 +42,22 @@ No separate token configuration needed — `gh-stats` uses your `gh` auth token 
 ## Quick Start
 
 ```sh
-gh-stats                       # how am I doing today + last 14 days
-gh-stats team <org>            # how is my team doing today + per-member breakdown
+gh-stats                       # totals, trends, and daily charts for the last 14 days
+gh-stats team <org>            # team totals, trends, and per-member breakdown
 gh-stats commits               # daily commit chart with DoD / WoW
-gh-stats --days 30             # extend the trend window to 30 days
+gh-stats --days 30             # show totals and charts for the last 30 days
 ```
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `gh-stats` | Default dashboard — today, trends, 14-day sparklines, top repos |
-| `gh-stats commits` | Daily commits — today, DoD, WoW, daily bar chart, repos |
+| `gh-stats` | Default dashboard — window totals, trends, daily charts, top repos |
+| `gh-stats commits` | Daily commits — window total, DoD, WoW, daily bar chart, repos |
 | `gh-stats prs` | Daily PRs — same shape as commits |
-| `gh-stats repos` | Repos ranked by combined commits + PRs (this week) |
+| `gh-stats repos` | Repos ranked by combined commits + PRs over `--days` |
 | `gh-stats orgs` | List your GitHub organizations |
-| `gh-stats team <org>` | Team-wide stats — today, DoD/WoW, per-member breakdown + sparklines |
+| `gh-stats team <org>` | Team-wide stats — window totals, DoD/WoW, per-member breakdown + sparklines |
 | `gh-stats team <org> --member <user>` | Filter team view to one member |
 | `gh-stats refresh` | Bust the cache and re-fetch |
 | `gh-stats cache` | Print cache path; `--clear` to delete it |
@@ -66,14 +66,14 @@ gh-stats --days 30             # extend the trend window to 30 days
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--days N` | `14` | Window in days for trends and charts |
+| `--days N` | `14` | Window in days for totals, repo rankings, and charts |
 | `--no-cache` | `false` | Bypass cache, force re-fetch |
 | `--json` | `false` | JSON output |
 | `--user <login>` | auto-detected | GitHub username |
 
 ## Team dashboard
 
-`gh-stats team <org>` is the killer view — today's totals, per-member breakdown, day-over-day and week-over-week trends per person, plus a 14-day sparkline row for each member:
+`gh-stats team <org>` is the killer view: window totals, per-member breakdown, day-over-day and week-over-week trends per person, plus a sparkline row for each member:
 
 <div align="center">
 

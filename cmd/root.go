@@ -31,10 +31,14 @@ const (
 var rootCmd = &cobra.Command{
 	Use:           "gh-stats",
 	Short:         "Personal GitHub contribution stats",
-	Long:          "View your GitHub contribution stats — today's PRs and commits, day-over-day and week-over-week trends, sparklines.",
+	Long:          "View your GitHub contribution stats: window totals, day-over-day and week-over-week trends, and daily charts.",
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		if days < 1 {
+			return fmt.Errorf("--days must be at least 1")
+		}
+
 		cfg, err := config.Load()
 		if err != nil {
 			return err
@@ -94,6 +98,13 @@ func weekBounds(weeksAgo int) (time.Time, time.Time) {
 
 	endTime := time.Date(end.Year(), end.Month(), end.Day(), 23, 59, 59, 0, end.Location())
 	return startMonday, endTime
+}
+
+// windowBounds returns the inclusive date-time range represented by --days.
+func windowBounds(today time.Time, days int) (time.Time, time.Time) {
+	start := today.AddDate(0, 0, -(days - 1))
+	end := time.Date(today.Year(), today.Month(), today.Day(), 23, 59, 59, 0, today.Location())
+	return start, end
 }
 
 func startOfDay(t time.Time) time.Time {
@@ -165,7 +176,6 @@ func dashboard() error {
 	}
 
 	if jsonOutput {
-		// Reuse the latest week vs prior week comparison for JSON.
 		this := weekly[len(weekly)-1]
 		var last *gh.Contributions
 		if len(weekly) > 1 {
@@ -179,6 +189,8 @@ func dashboard() error {
 
 	commitDays := aggregateDays(weekly, func(c *gh.Contributions) []gh.DayContribution { return c.Days })
 	prDays := aggregateDays(weekly, func(c *gh.Contributions) []gh.DayContribution { return c.PRDays })
+	commitWindow := render.FillDays(commitDays, today, days)
+	prWindow := render.FillDays(prDays, today, days)
 
 	render.Bold.Print("GitHub Stats")
 	render.Dim.Printf("  ·  %s  ·  %s", username, today.Format("Mon Jan 2"))
@@ -188,17 +200,18 @@ func dashboard() error {
 	fmt.Println()
 	fmt.Println()
 
-	renderTodaySection(commitDays, prDays, today, "")
+	renderWindowSummary(windowSummaryLabel(days), "",
+		summaryMetric{"Pull Requests", sumContributionDays(prWindow)},
+		summaryMetric{"Commits", sumContributionDays(commitWindow)})
 	renderTrendsSection(commitDays, prDays, today)
 
 	renderDailyBars(fmt.Sprintf("Commits · last %d days", days),
-		render.FillDays(commitDays, today, days), today, color.New(color.FgCyan))
+		commitWindow, today, color.New(color.FgCyan))
 	renderDailyBars(fmt.Sprintf("PRs · last %d days", days),
-		render.FillDays(prDays, today, days), today, color.New(color.FgGreen))
+		prWindow, today, color.New(color.FgGreen))
 
 	thisStart, _ := weekBounds(0)
 	commitRepos := aggregateRepos(weekly, func(c *gh.Contributions) []gh.RepoContribution {
-		// Show repos for the current week only on the dashboard.
 		if c == weekly[len(weekly)-1] {
 			return c.CommitRepos
 		}
@@ -221,16 +234,34 @@ func dashboard() error {
 	return nil
 }
 
-func renderTodaySection(commitDays, prDays []gh.DayContribution, today time.Time, indent string) {
-	commitsToday := render.CountOn(commitDays, today)
-	prsToday := render.CountOn(prDays, today)
+type summaryMetric struct {
+	label string
+	total int
+}
 
-	render.Bold.Println(indent + "Today")
-	fmt.Printf(indent+"  %-15s ", "Pull Requests")
-	render.Bold.Printf("%4d\n", prsToday)
-	fmt.Printf(indent+"  %-15s ", "Commits")
-	render.Bold.Printf("%4d\n", commitsToday)
+// renderWindowSummary prints the primary aggregate totals for the active date window.
+func renderWindowSummary(label string, indent string, metrics ...summaryMetric) {
+	render.Bold.Println(indent + label)
+	for _, metric := range metrics {
+		fmt.Printf(indent+"  %-15s ", metric.label)
+		render.Bold.Printf("%4d\n", metric.total)
+	}
 	fmt.Println()
+}
+
+func windowSummaryLabel(days int) string {
+	if days == 1 {
+		return "Today"
+	}
+	return fmt.Sprintf("Last %d Days", days)
+}
+
+func sumContributionDays(days []gh.DayContribution) int {
+	total := 0
+	for _, day := range days {
+		total += day.Count
+	}
+	return total
 }
 
 func renderTrendsSection(commitDays, prDays []gh.DayContribution, today time.Time) {
